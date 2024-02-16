@@ -9,3 +9,6 @@ Type=oneshot
 ExecStartPre=chattr -i /
 ExecStart=mkdir -p '%f'
 ExecStopPost=chattr +i /
+
+[Install]
+WantedBy=multi-user.target
