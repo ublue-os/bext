@@ -8,3 +8,5 @@ packages/
 output.tar
 sbom-*
 bext
+
+dist/
