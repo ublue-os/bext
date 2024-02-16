@@ -4,8 +4,14 @@ ConditionPathExists=!%f
 DefaultDependencies=no
 Requires=systemd-sysext.service
 After=systemd-sysext.service
+After=mkdir-rootfs@nix.service
+Wants=mkdir-rootfs@nix.service
 [Service]
 Type=oneshot
+ExecStartPre=mkdir -p /tmp/extensions.d/bin
+ExecStartPre=mkdir -p /nix/store
 ExecStartPre=bext mount extensions --refresh
 ExecStart=bext mount store --refresh
 ExecStopPost=bext mount path
+[Install]
+WantedBy=multi-user.target
