@@ -4,6 +4,8 @@ ConditionPathExists=!%f
 DefaultDependencies=no
 Requires=systemd-sysext.service
 After=systemd-sysext.service
+After=mkdir-rootfs@nix.service
+Wants=mkdir-rootfs@nix.service
 [Service]
 Type=oneshot
 ExecStartPre=bext mount extensions --refresh
