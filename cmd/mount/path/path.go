@@ -1,14 +1,15 @@
 package path
 
 import (
-	"github.com/spf13/cobra"
-	"github.com/ublue-os/bext/internal"
 	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	"github.com/spf13/cobra"
+	"github.com/ublue-os/bext/internal"
 )
 
 var PathCmd = &cobra.Command{
@@ -65,7 +66,7 @@ func pathCmd(cmd *cobra.Command, args []string) error {
 		mount_path := path.Join(extensions_mount, layers[0].Name(), "bin")
 		if _, err := os.Stat(path_path); err == nil {
 			slog.Debug("Unmounting", slog.String("path", path_path))
-			syscall.Unmount(path_path, 0)
+			_ = syscall.Unmount(path_path, 0)
 		}
 		if err := syscall.Mount(mount_path, path_path, "bind", uintptr(syscall.MS_BIND|syscall.MS_RDONLY), ""); err != nil {
 			return err
@@ -73,10 +74,10 @@ func pathCmd(cmd *cobra.Command, args []string) error {
 	} else {
 		if _, err := os.Stat(path_path); err == nil {
 			slog.Debug("Unmounting", slog.String("path", path_path))
-			syscall.Unmount(path_path, 0)
+			_ = syscall.Unmount(path_path, 0)
 		}
 
-		syscall.Unmount(path_path, 0)
+		_ = syscall.Unmount(path_path, 0)
 		err = syscall.Mount("none", path_path, "overlayfs", uintptr(syscall.MS_RDONLY|syscall.MS_NODEV|syscall.MS_NOATIME), "lowerdir="+strings.Join(valid_layers, ":"))
 		if err != nil {
 			return err

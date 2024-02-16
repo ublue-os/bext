@@ -40,7 +40,7 @@ var defaultConfiguration = &internal.LayerConfiguration{
 }
 
 func initCmd(cmd *cobra.Command, args []string) error {
-	var json_config *[]byte = nil
+	var json_config *[]byte
 	if *fTemplate == "" {
 		slog.Debug("Using default template")
 		var err error
