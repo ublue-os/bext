@@ -11,7 +11,7 @@ import (
 	"github.com/ublue-os/bext/internal"
 	"github.com/ublue-os/bext/pkg/fileio"
 	"github.com/ublue-os/bext/pkg/logging"
-	"github.com/ublue-os/bext/pkg/percentmanager"
+	percent "github.com/ublue-os/bext/pkg/percentmanager"
 )
 
 var RemoveCmd = &cobra.Command{
@@ -32,6 +32,10 @@ func init() {
 }
 
 func removeCmd(cmd *cobra.Command, args []string) error {
+
+	// todo dryrun flag
+	slog.Info("Ignoring dryrun flag", "dryrun", fDryRun)
+
 	pw := percent.NewProgressWriter()
 	if !*internal.Config.NoProgress {
 		go pw.Render()

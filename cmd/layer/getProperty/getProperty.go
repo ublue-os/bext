@@ -48,7 +48,7 @@ func remove(slice []string, s int) []string {
 
 func getPropertyCmd(cmd *cobra.Command, args []string) error {
 	var (
-		target_layer        string = ""
+		target_layer        string
 		config_file_path    string
 		raw_configuration   []byte
 		unmarshalled_config = &internal.LayerConfiguration{}
