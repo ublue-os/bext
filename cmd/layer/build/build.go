@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path"
@@ -24,7 +25,7 @@ import (
 )
 
 var BuildCmd = &cobra.Command{
-	Use:   "build",
+	Use:   "build [CONFIG]",
 	Short: "Build an image from a configuration file",
 	Long:  `Build an image from a configuration file`,
 	RunE:  buildCmd,
@@ -51,6 +52,10 @@ func init() {
 }
 
 func buildCmd(cmd *cobra.Command, args []string) error {
+	if len(args) < 1 {
+		return internal.NewPositionalError("CONFIG")
+	}
+
 	pw := percent.NewProgressWriter()
 
 	var (
@@ -78,10 +83,6 @@ func buildCmd(cmd *cobra.Command, args []string) error {
 	}
 	pw.AppendTracker(build_tracker.Tracker)
 
-	if len(args) < 1 {
-		return internal.NewPositionalError("CONFIG")
-	}
-
 	config_file_path, err := filepath.Abs(path.Clean(args[0]))
 	if err != nil {
 		return err
@@ -106,6 +107,7 @@ func buildCmd(cmd *cobra.Command, args []string) error {
 
 	conn, err := bindings.NewConnection(context.Background(), socket)
 	if err != nil {
+		slog.Warn("A podman socket is required, enable it with \"systemctl enable --now --user podman.socket\"")
 		return err
 	}
 	build_tracker.IncrementSection()
@@ -130,8 +132,13 @@ func buildCmd(cmd *cobra.Command, args []string) error {
 			tracker := progress.Tracker{Message: "Pulling image", Total: int64(100), Units: progress.UnitsDefault}
 			pw.AppendTracker(&tracker)
 
+			var pull_opt = &images.PullOptions{ProgressWriter: &io.Discard}
+			if *internal.Config.NoProgress {
+				pull_opt = &images.PullOptions{}
+			}
+
 			tracker.Increment(0)
-			if _, err := images.Pull(conn, full_image_name, &images.PullOptions{}); err != nil {
+			if _, err := images.Pull(conn, full_image_name, pull_opt); err != nil {
 				return err
 			}
 			tracker.Increment(100)

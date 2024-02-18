@@ -21,7 +21,7 @@ import (
 )
 
 var AddCmd = &cobra.Command{
-	Use:   "add",
+	Use:   "add [TARGET]",
 	Short: "Add a built layer onto the cache and activate it",
 	Long:  `Copy TARGET over to cache-dir as a blob with the TARGET's sha256 as the filename`,
 	RunE:  addCmd,

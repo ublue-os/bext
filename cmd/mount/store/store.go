@@ -1,6 +1,7 @@
 package store
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"path"
@@ -14,18 +15,19 @@ import (
 
 var StoreCmd = &cobra.Command{
 	Use:   "store",
-	Short: "Mount /usr/store to /nix/store",
-	Long:  `Mount /usr/store to /nix/store so that your layered binaries may work`,
+	Short: fmt.Sprintf("Mount %s to %s safely", LayeredStorePath, NixStorePath),
+	Long:  fmt.Sprintf(`Mount %s to %s so that your layered binaries may work`, LayeredStorePath, NixStorePath),
 	RunE:  storeCmd,
 }
 
+const NixStorePath = "/nix/store"
+const LayeredStorePath = "/usr/store"
+
 var (
-	fRefreshStore       *bool
 	fStoreBindmountPath *string
 )
 
 func init() {
-	fRefreshStore = StoreCmd.Flags().BoolP("refresh", "r", true, "Refresh the nix store")
 	fStoreBindmountPath = StoreCmd.Flags().String("bindmount-path", "/tmp/nix-store-bindmount", "Path where an already existing nix store will be bind-mounted to")
 }
 
@@ -35,12 +37,9 @@ func storeCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// todo refresh flag
-	slog.Info("Ignoring refresh flag", "refresh", fRefreshStore)
-
 	if *internal.Config.UnmountFlag {
-		slog.Debug("Unmounting store", slog.String("target", "/nix/store"))
-		if err := syscall.Unmount("/nix/store", 0); err != nil {
+		slog.Debug("Unmounting store", slog.String("target", NixStorePath))
+		if err := syscall.Unmount(NixStorePath, 0); err != nil {
 			return err
 		}
 
@@ -48,7 +47,7 @@ func storeCmd(cmd *cobra.Command, args []string) error {
 		if err := syscall.Unmount(bindmount_path, 0); err != nil {
 			return err
 		}
-		slog.Info("Successfully unmounted store and bindmount", slog.String("store_path", "/nix/store"), slog.String("bindmount_path", bindmount_path))
+		slog.Info("Successfully unmounted store and bindmount", slog.String("store_path", NixStorePath), slog.String("bindmount_path", bindmount_path))
 		return nil
 	}
 
@@ -59,59 +58,68 @@ func storeCmd(cmd *cobra.Command, args []string) error {
 		}
 		defer root_dir.Close()
 
-		slog.Debug("Creating nix store", slog.String("target", "/nix/store"))
+		slog.Debug("Creating nix store", slog.String("target", NixStorePath))
 		err = chattr.SetAttr(root_dir, chattr.FS_IMMUTABLE_FL)
 		if err != nil {
+			slog.Warn("Failed unsetting immutable attributes to /", slog.String("target", "/"))
 			return err
 		}
-		if err := os.Mkdir("/nix/store", 0755); err != nil {
+		if err := os.MkdirAll(NixStorePath, 0755); err != nil {
+			slog.Warn("Failed creating root nix store path", slog.String("target", NixStorePath))
 			return err
 		}
 		err = chattr.UnsetAttr(root_dir, chattr.FS_IMMUTABLE_FL)
 		if err != nil {
+			slog.Warn("Failed setting immutable attributes to /", slog.String("target", "/"))
+			return err
+		}
+	} else if _, err := os.Stat(NixStorePath); err != nil {
+		if err := os.MkdirAll(NixStorePath, 0755); err != nil {
+			slog.Warn("Failed creating root nix store path", slog.String("target", NixStorePath))
 			return err
 		}
 	}
 
-	store_contents, err := os.ReadDir("/nix/store")
+	store_contents, err := os.ReadDir(NixStorePath)
 	if err != nil {
 		return err
 	}
 
+	if len(store_contents) > 0 {
+		_ = syscall.Unmount(NixStorePath, 0)
+	}
+
 	if _, err := os.Stat(bindmount_path); err != nil && len(store_contents) > 0 {
+		slog.Debug("Creating bindmount", slog.String("target", bindmount_path))
 		if err := os.MkdirAll(bindmount_path, 0755); err != nil {
 			return err
 		}
 
-		err = syscall.Unmount("/nix/store", 0)
-		if err != nil {
+		_ = syscall.Unmount(NixStorePath, 0)
+		_ = syscall.Unmount(bindmount_path, 0)
+
+		slog.Debug("Mounting bindmount", slog.String("source", bindmount_path), slog.String("target", NixStorePath))
+		if err := syscall.Mount(NixStorePath, bindmount_path, "bind", uintptr(syscall.MS_BIND), ""); err != nil {
+			slog.Warn("Failed mounting root nix store to bindmount", slog.String("source", NixStorePath), slog.String("target", bindmount_path))
 			return err
 		}
 
-		err = syscall.Unmount(bindmount_path, 0)
-		if err != nil {
-			return err
-		}
-
-		slog.Debug("Mounting store to itself", slog.String("source", "/nix/store"), slog.String("target", bindmount_path))
-		if err := syscall.Mount("/nix/store", bindmount_path, "bind", uintptr(syscall.MS_BIND), ""); err != nil {
-			return err
-		}
-
-		if err := syscall.Mount(bindmount_path, "/nix/store", "bind", uintptr(syscall.MS_BIND), ""); err != nil {
+		slog.Debug("Mounting store to itself", slog.String("source", NixStorePath), slog.String("target", bindmount_path))
+		if err := syscall.Mount(bindmount_path, NixStorePath, "bind", uintptr(syscall.MS_BIND), ""); err != nil {
+			slog.Warn("Failed mounting bindmount to root nix store", slog.String("source", bindmount_path), slog.String("target", NixStorePath))
 			return err
 		}
 	}
 
-	if _, err := os.Stat("/usr/store"); err != nil {
+	if _, err := os.Stat(LayeredStorePath); err != nil {
+		slog.Warn("No layered store could be found in " + LayeredStorePath)
 		return err
 	}
 
-	if _, err := os.Stat("/nix"); err == nil {
-		slog.Info("Mounting /usr/store to /nix/store", slog.String("source", "/usr/store"), slog.String("target", "/nix/store"))
-		if err := syscall.Mount("/usr/store", "/nix/store", "bind", uintptr(syscall.MS_BIND|syscall.MS_RDONLY), ""); err != nil {
-			return err
-		}
+	slog.Info(fmt.Sprintf("Mounting %s to %s", LayeredStorePath, NixStorePath), slog.String("source", LayeredStorePath), slog.String("target", NixStorePath))
+	if err := syscall.Mount(LayeredStorePath, NixStorePath, "bind", uintptr(syscall.MS_BIND|syscall.MS_RDONLY), ""); err != nil {
+		slog.Warn("Failed mounting layered nix stores to root nix store.", slog.String("source", LayeredStorePath), slog.String("target", NixStorePath))
+		return err
 	}
 	return nil
 }

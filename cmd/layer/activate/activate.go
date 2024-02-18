@@ -13,7 +13,7 @@ import (
 )
 
 var ActivateCmd = &cobra.Command{
-	Use:   "activate",
+	Use:   "activate [TARGET]",
 	Short: "Activate a layer and refresh sysext",
 	Long:  `Activate a selected layer (symlink it to /var/lib/extensions) and refresh the system extensions store.`,
 	RunE:  activateCmd,

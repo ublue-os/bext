@@ -16,15 +16,15 @@ import (
 )
 
 var ListCmd = &cobra.Command{
-	Use:   "list",
+	Use:   "list [LAYER/HASH]",
 	Short: "List layers in cache and in activation",
-	Long:  `List layers in the cache directory, their blobs and symlinks in their cache`,
+	Long:  `List layers in the cache directory, their blobs and symlinks in their cache. Can also single check a layer or hash specified.`,
 	RunE:  listCmd,
 }
 
 var (
 	fLayer     *string
-	fQuiet     *bool
+	fCheck     *bool
 	fVerbose   *bool
 	fActivated *bool
 	fSeparator *string
@@ -34,7 +34,7 @@ var (
 func init() {
 	fVerbose = ListCmd.Flags().BoolP("verbose", "v", false, "List all layer's hashes")
 	fLayer = ListCmd.Flags().StringP("layer", "l", "", "List hashes inside the target layer")
-	fQuiet = ListCmd.Flags().BoolP("quiet", "q", false, "Only check for layer or hash existence instead of listing")
+	fCheck = ListCmd.Flags().BoolP("check", "c", false, "Only check for layer or hash existence instead of listing")
 	fActivated = ListCmd.Flags().Bool("activated", false, "List only activated layers")
 	fSeparator = ListCmd.Flags().StringP("separator", "s", "\n", "Separator for listing things like arrays")
 	fLogOnly = ListCmd.Flags().Bool("log", false, "Do not make a table, just log everything")
@@ -53,7 +53,7 @@ func listCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if *fQuiet {
+	if *fCheck {
 		if len(args) < 1 {
 			return internal.NewPositionalError("LAYER")
 		}

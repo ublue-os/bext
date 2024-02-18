@@ -2,7 +2,9 @@ package extensions
 
 import (
 	"fmt"
+	"log/slog"
 	"os/exec"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/ublue-os/bext/internal"
@@ -41,6 +43,7 @@ func extensionsCmd(cmd *cobra.Command, args []string) error {
 		command = append(command, "merge")
 	}
 
+	slog.Debug("Running systemd-sysext", slog.String("command", strings.Join(command, " ")))
 	out, err := exec.Command("systemd-sysext", command...).Output()
 	if err != nil {
 		fmt.Printf("%s\n", out)
