@@ -1,0 +1,3 @@
+FROM docker.io/library/fedora:latest
+
+RUN dnf update -y && dnf install device-mapper-devel gpgme-devel btrfs-progs-devel golang-go golint golang-honnef-tools golang-mvdan-gofumpt   && dnf clean all -y
