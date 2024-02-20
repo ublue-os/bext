@@ -34,7 +34,9 @@ func pathCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if *internal.Config.UnmountFlag {
+		slog.Debug("Unmounting", slog.String("target", path_path))
 		if err := syscall.Unmount(path_path, 0); err != nil {
+			slog.Warn("Failed unmounting path", slog.String("target", path_path))
 			return err
 		}
 		slog.Info("Successfuly unmounted path "+path_path, slog.String("path", path_path))
@@ -48,6 +50,7 @@ func pathCmd(cmd *cobra.Command, args []string) error {
 
 	layers, err := os.ReadDir(extensions_mount)
 	if err != nil {
+		slog.Warn("No layers are mounted")
 		return err
 	}
 
@@ -59,8 +62,13 @@ func pathCmd(cmd *cobra.Command, args []string) error {
 		valid_layers = append(valid_layers, layer.Name())
 	}
 
+	if err := os.MkdirAll(path_path, 0755); err != nil {
+		slog.Warn("Failed creating mount path", slog.String("target", path_path))
+		return err
+	}
+
 	if len(layers) == 0 {
-		slog.Warn("No layers are mounted")
+		slog.Warn("No valid layers are mounted")
 		os.Exit(1)
 	} else if len(layers) == 1 {
 		mount_path := path.Join(extensions_mount, layers[0].Name(), "bin")
@@ -68,21 +76,23 @@ func pathCmd(cmd *cobra.Command, args []string) error {
 			slog.Debug("Unmounting", slog.String("path", path_path))
 			_ = syscall.Unmount(path_path, 0)
 		}
+
 		if err := syscall.Mount(mount_path, path_path, "bind", uintptr(syscall.MS_BIND|syscall.MS_RDONLY), ""); err != nil {
+			slog.Warn("Failed mounting bindmount to path", slog.String("source", mount_path), slog.String("target", path_path))
 			return err
 		}
 	} else {
-		if _, err := os.Stat(path_path); err == nil {
-			slog.Debug("Unmounting", slog.String("path", path_path))
-			_ = syscall.Unmount(path_path, 0)
-		}
-
+		slog.Debug("Unmounting", slog.String("path", path_path))
 		_ = syscall.Unmount(path_path, 0)
+
+		slog.Debug("Mounting path with overlayFS", slog.String("layers", strings.Join(valid_layers, " ")), slog.String("target", path_path))
 		err = syscall.Mount("none", path_path, "overlayfs", uintptr(syscall.MS_RDONLY|syscall.MS_NODEV|syscall.MS_NOATIME), "lowerdir="+strings.Join(valid_layers, ":"))
 		if err != nil {
 			return err
 		}
 	}
+
+	slog.Info("Successfully mounted PATH")
 
 	return nil
 }

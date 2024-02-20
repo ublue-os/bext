@@ -14,7 +14,7 @@ import (
 )
 
 var AddToPathCmd = &cobra.Command{
-	Use:   "add-to-path",
+	Use:   "add-to-path [...SHELL]",
 	Short: "Add the mounted layer binaries to your path",
 	Long:  `Write a snippet for your shell of the mounted path for the activated bext layers`,
 	RunE:  addToPathCmd,
@@ -37,7 +37,12 @@ func init() {
 
 func addToPathCmd(cmd *cobra.Command, args []string) error {
 	if len(args) < 1 {
-		return internal.NewPositionalError("SHELL")
+		return internal.NewPositionalError("SHELL...")
+	}
+	if len(args) > 0 && *fRCPath != "" {
+		//TODO: make this be possible, honestly, there should be something like zip() to sync up those.
+		slog.Warn("Cannot write multiple shell snippets with rc path being specified, will write to default paths")
+		os.Exit(1)
 	}
 
 	user_home, err := os.UserHomeDir()
@@ -69,23 +74,27 @@ func addToPathCmd(cmd *cobra.Command, args []string) error {
 		valid_stuff = append(valid_stuff, key)
 	}
 
-	if !slices.Contains(valid_stuff, args[0]) {
-		slog.Warn(fmt.Sprintf("Could not find shell %s, valid shells are: %s", args[0], strings.Join(valid_stuff, ", ")))
-		os.Exit(1)
-	}
+	for _, shell := range args {
+		cleaned_shell := path.Base(path.Clean(shell))
 
-	var rcPath string
-	if *fRCPath != "" {
-		rcPath = path.Clean(*fRCPath)
-	} else {
-		rcPath = defaultValues[args[0]].RcPath
-	}
+		if !slices.Contains(valid_stuff, cleaned_shell) {
+			slog.Warn(fmt.Sprintf("Could not find shell %s, valid shells are: %s", cleaned_shell, strings.Join(valid_stuff, ", ")))
+			os.Exit(1)
+		}
 
-	if _, err := fileio.FileAppendS(rcPath, defaultValues[args[0]].Snippet); err != nil {
-		return err
-	}
+		var rcPath string
+		if *fRCPath != "" {
+			rcPath = path.Clean(*fRCPath)
+		} else {
+			rcPath = defaultValues[cleaned_shell].RcPath
+		}
 
-	slog.Info(fmt.Sprintf("Successfully written snippet to %s\n", rcPath))
+		if _, err := fileio.FileAppendS(rcPath, defaultValues[cleaned_shell].Snippet); err != nil {
+			slog.Warn(fmt.Sprintf("Failed writing %s snippet to %s", cleaned_shell, rcPath), slog.String("source", cleaned_shell), slog.String("target", rcPath))
+			return err
+		}
+		slog.Info(fmt.Sprintf("Successfully written snippet to %s", rcPath))
+	}
 
 	return nil
 }

@@ -10,7 +10,7 @@ import (
 )
 
 var DeactivateCmd = &cobra.Command{
-	Use:   "deactivate",
+	Use:   "deactivate [TARGET]",
 	Short: "Deactivate a layer and refresh sysext",
 	Long:  `Deativate a selected layer (unsymlink it from /var/lib/extensions) and refresh the system extensions store.`,
 	RunE:  deactivateCmd,

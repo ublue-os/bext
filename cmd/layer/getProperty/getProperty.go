@@ -20,7 +20,7 @@ import (
 var validOptions []string = []string{"NAME", "PACKAGES", "ARCH", "OS", "BINARIES", "ISMOUNTED"}
 
 var GetPropertyCmd = &cobra.Command{
-	Use:   "get-property",
+	Use:   "get-property [LAYER]",
 	Short: "Get properties from a selected layer or configuration file",
 	Long: fmt.Sprintf(`Get properties from a selected layer or configuration file
 
@@ -31,13 +31,13 @@ Supported properties:
 }
 
 var (
-	fFromFile  *string
+	fFromFile  *bool
 	fSeparator *string
 	fLogOnly   *bool
 )
 
 func init() {
-	fFromFile = GetPropertyCmd.Flags().StringP("from-file", "f", "", "Read data from a file instead of layer")
+	fFromFile = GetPropertyCmd.Flags().BoolP("from-file", "f", false, "Read data from a file instead of layer")
 	fLogOnly = GetPropertyCmd.Flags().Bool("log", false, "Do not make a table, just log everything")
 	fSeparator = GetPropertyCmd.Flags().StringP("separator", "s", "\n", "Separator for listing things like arrays")
 }
@@ -48,25 +48,28 @@ func remove(slice []string, s int) []string {
 
 func getPropertyCmd(cmd *cobra.Command, args []string) error {
 	var (
-		target_layer        string
 		config_file_path    string
 		raw_configuration   []byte
 		unmarshalled_config = &internal.LayerConfiguration{}
 	)
+	if len(args) < 1 && !*fFromFile {
+		return internal.NewPositionalError("LAYER")
+	} else if len(args) < 1 && *fFromFile {
+		return internal.NewPositionalError("PATH")
+	}
 
 	if !*fLogOnly {
 		slog.SetDefault(logging.NewMuteLogger())
 	}
 
-	if *fFromFile == "" {
-		if len(args) < 1 {
-			return internal.NewPositionalError("LAYER")
-		}
-		target_layer = args[0]
+	if !*fFromFile {
+		target_layer := args[0]
 		args = remove(args, 0)
 		config_file_path = path.Join(internal.Config.ExtensionsMount, target_layer, internal.MetadataFileName)
 	} else {
-		config_file_path = path.Clean(*fFromFile)
+		target_file := args[0]
+		args = remove(args, 0)
+		config_file_path = path.Clean(target_file)
 	}
 
 	raw_configuration, err := os.ReadFile(config_file_path)
