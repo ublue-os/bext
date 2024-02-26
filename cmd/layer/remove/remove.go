@@ -1,10 +1,14 @@
 package remove
 
 import (
+	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
+	"sync"
 
 	"github.com/jedib0t/go-pretty/v6/progress"
 	"github.com/spf13/cobra"
@@ -15,24 +19,24 @@ import (
 )
 
 var RemoveCmd = &cobra.Command{
-	Use:   "remove",
+	Use:   "remove [TARGET...]",
 	Short: "Remove a layer from your managed layers",
 	Long:  `Remove either an entire layer or a specific hash in cache for that layer`,
 	RunE:  removeCmd,
+	Args:  cobra.MinimumNArgs(1),
 }
 
 var (
-	fHash   *string
-	fDryRun *bool
+	fHash   []string
+	fDryRun bool
 )
 
 func init() {
-	fHash = RemoveCmd.Flags().StringP("hash", "h", "", "Remove specific hash from storage")
-	fDryRun = RemoveCmd.Flags().Bool("dry-run", false, "Do not remove anything")
+	RemoveCmd.Flags().StringSliceVarP(&fHash, "hash", "h", []string{}, "Remove specific hash from storage")
+	RemoveCmd.Flags().BoolVar(&fDryRun, "dry-run", false, "Do not remove anything")
 }
 
 func removeCmd(cmd *cobra.Command, args []string) error {
-
 	// todo dryrun flag
 	slog.Info("Ignoring dryrun flag", "dryrun", fDryRun)
 
@@ -41,61 +45,73 @@ func removeCmd(cmd *cobra.Command, args []string) error {
 		go pw.Render()
 		slog.SetDefault(logging.NewMuteLogger())
 	}
-
-	if len(args) < 1 {
-		return internal.NewPositionalError("TARGET")
+	if len(fHash) > 1 {
+		pw.SetNumTrackersExpected(len(fHash))
+	} else {
+		pw.SetNumTrackersExpected(len(args))
 	}
-
-	target_layer := args[0]
-
 	cache_dir, err := filepath.Abs(path.Clean(internal.Config.CacheDir))
 	if err != nil {
 		return err
 	}
 
-	var message string = "Deleting layer " + target_layer
-	var expectedSections = 4
+	var (
+		wg      sync.WaitGroup
+		errChan = make(chan error, len(fHash))
+	)
 
-	if *fHash != "" {
-		message = "Deleting hash " + target_layer
-		expectedSections = expectedSections + 1
-	}
-	delete_tracker := percent.NewIncrementTracker(&progress.Tracker{Message: message, Total: int64(100), Units: progress.UnitsDefault}, expectedSections)
-	pw.AppendTracker(delete_tracker.Tracker)
-
-	if *fHash != "" {
-		delete_tracker.IncrementSection()
-		err := os.Remove(path.Join(cache_dir, target_layer, *fHash))
-		if err != nil {
-			return err
-		}
-		slog.Info("Successfuly deleted " + *fHash)
-		return nil
+	if len(args) > 1 && len(fHash) > 1 {
+		return errors.New("when removing hashes, it is required to only specify one layer")
 	}
 
-	delete_tracker.IncrementSection()
-	slog.Debug("Deleting layer", slog.String("target", target_layer))
-	err = os.RemoveAll(path.Join(cache_dir, target_layer))
-	if err != nil {
-		return err
+	for _, hash := range fHash {
+		wg.Add(1)
+		go func(errChan chan<- error, target string) {
+			defer wg.Done()
+			delete_tracker := percent.NewIncrementTracker(&progress.Tracker{Message: "Deleting hash", Total: int64(100), Units: progress.UnitsDefault}, 1)
+			defer delete_tracker.Tracker.MarkAsDone()
+			pw.AppendTracker(delete_tracker.Tracker)
+
+			if len(fHash) > 0 {
+				err := os.Remove(path.Join(cache_dir, args[0], target))
+				if err != nil {
+					errChan <- err
+					return
+				}
+				return
+			} else {
+				err := os.RemoveAll(path.Join(cache_dir, target))
+				if err != nil {
+					errChan <- err
+					return
+				}
+			}
+
+			deactivated_layer := path.Join(internal.Config.ExtensionsDir, target) + internal.ValidSysextExtension
+			if !fileio.FileExist(deactivated_layer) {
+				return
+			}
+
+			err = os.Remove(deactivated_layer)
+			if err != nil {
+				errChan <- err
+				return
+			}
+		}(errChan, hash)
 	}
 
-	delete_tracker.IncrementSection()
-	deactivated_layer := path.Join(internal.Config.ExtensionsDir, target_layer) + internal.ValidSysextExtension
-	if !fileio.FileExist(deactivated_layer) {
-		return nil
+	go func() {
+		wg.Wait()
+		close(errChan)
+	}()
+
+	for err := range errChan {
+		slog.Warn(fmt.Sprintf("Error encountered when deleting targets: %s", err.Error()), slog.String("error", err.Error()))
 	}
 
-	delete_tracker.IncrementSection()
-	slog.Debug("Deactivating layer", slog.String("target", deactivated_layer))
-	err = os.Remove(deactivated_layer)
-	if err != nil {
-		return err
+	if len(errChan) == 0 {
+		slog.Info("Successfully deleted target from cache", slog.String("hashes", strings.Join(fHash, " ")))
 	}
 
-	slog.Info("Successfuly deleted "+deactivated_layer, slog.String("target", deactivated_layer))
-
-	delete_tracker.IncrementSection()
-	delete_tracker.Tracker.MarkAsDone()
 	return nil
 }
