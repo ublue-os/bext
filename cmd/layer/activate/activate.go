@@ -27,17 +27,6 @@ func init() {
 	ActivateCmd.Flags().BoolVarP(&fFromFile, "file", "f", false, "Parse positional arguments as files instead of layers")
 }
 
-func mapVal[T, U any](data []T, f func(T) U) []U {
-
-	res := make([]U, 0, len(data))
-
-	for _, e := range data {
-		res = append(res, f(e))
-	}
-
-	return res
-}
-
 func activateCmd(cmd *cobra.Command, args []string) error {
 	extensions_dir, err := filepath.Abs(path.Clean(internal.Config.ExtensionsDir))
 	if err != nil {
@@ -72,7 +61,7 @@ func activateCmd(cmd *cobra.Command, args []string) error {
 		}
 		wg.Done()
 
-		slog.Info("Successfully activated layers " + strings.Join(mapVal(args, path.Base), " "))
+		slog.Info("Successfully activated layers " + strings.Join(internal.MapVal(args, path.Base), " "))
 		return nil
 	}
 
@@ -108,6 +97,6 @@ func activateCmd(cmd *cobra.Command, args []string) error {
 	}
 	wg.Wait()
 
-	slog.Info("Successfully activated layers " + strings.Join(mapVal(args, path.Base), " "))
+	slog.Info("Successfully activated layers " + strings.Join(internal.MapVal(args, path.Base), " "))
 	return nil
 }

@@ -32,6 +32,23 @@ func GetFileChecksum(file *os.File, hash hash.Hash) ([]byte, error) {
 	return hash.Sum(nil), nil
 }
 
+func CheckExpectedSum(hashing_algo hash.Hash, expectedSum []byte, files ...*os.File) (bool, error) {
+	for _, file := range files {
+		checksum, err := GetFileChecksum(file, hashing_algo)
+		if err != nil {
+			return false, err
+		}
+
+		if !reflect.DeepEqual(checksum, expectedSum) {
+			return false, &ChecksumError{
+				Message: "Could not verify that file is equal to checksum",
+			}
+		}
+	}
+
+	return true, nil
+}
+
 func CheckFilesAreEqual(hashing_algo hash.Hash, files ...*os.File) (bool, error) {
 	var last_file_sum []byte
 	var err error
