@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/ublue-os/bext/internal"
 	"github.com/ublue-os/bext/pkg/fileio"
+	"github.com/ublue-os/bext/pkg/logging"
 	percent "github.com/ublue-os/bext/pkg/percentmanager"
 )
 
@@ -38,6 +39,7 @@ func removeCmd(cmd *cobra.Command, args []string) error {
 	pw := percent.NewProgressWriter()
 	if !*internal.Config.NoProgress {
 		go pw.Render()
+		slog.SetDefault(logging.NewMuteLogger())
 	}
 
 	if len(args) < 1 {
