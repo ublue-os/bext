@@ -2,6 +2,7 @@ package activate
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path"
@@ -21,10 +22,14 @@ var ActivateCmd = &cobra.Command{
 	Args:  cobra.MinimumNArgs(1),
 }
 
-var fFromFile bool
+var (
+	fFromFile bool
+	fOverride bool
+)
 
 func init() {
 	ActivateCmd.Flags().BoolVarP(&fFromFile, "file", "f", false, "Parse positional arguments as files instead of layers")
+	ActivateCmd.Flags().BoolVar(&fOverride, "override", true, "Write over old symlinks")
 }
 
 func activateCmd(cmd *cobra.Command, args []string) error {
@@ -33,38 +38,10 @@ func activateCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if fFromFile {
-		var wg sync.WaitGroup
-		for _, target_file := range args {
-			if !strings.HasSuffix(target_file, internal.ValidSysextExtension) {
-				return errors.New("failed to parse file name, invalid sysext extension. Should be " + internal.ValidSysextExtension)
-			}
-
-			deployment_path := path.Join(extensions_dir, path.Base(target_file))
-			slog.Debug("Activating layer "+target_file,
-				slog.Bool("fromfile", fFromFile),
-				slog.String("file layer", target_file),
-				slog.String("path", deployment_path),
-			)
-
-			file_abs, err := filepath.Abs(path.Clean(target_file))
-			if err != nil {
-				return err
-			}
-
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				_ = os.Remove(file_abs)
-				_ = os.Symlink(file_abs, path.Join(extensions_dir, path.Base(file_abs)))
-			}()
-		}
-		wg.Done()
-
-		slog.Info("Successfully activated layers " + strings.Join(internal.MapVal(args, path.Base), " "))
-		return nil
-	}
-
+	var (
+		errChan = make(chan error, len(args))
+		wg      sync.WaitGroup
+	)
 	cache_dir, err := filepath.Abs(path.Clean(internal.Config.CacheDir))
 	if err != nil {
 		return err
@@ -74,29 +51,63 @@ func activateCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	var wg sync.WaitGroup
-	for _, target_layer := range args {
-		current_blob_path := path.Join(cache_dir, target_layer, internal.CurrentBlobName)
-		if _, err := os.Stat(current_blob_path); err != nil {
-			return errors.New("target layer " + target_layer + " could not be found")
-		}
-
-		target_path := path.Join(extensions_dir, path.Base(path.Dir(current_blob_path))+internal.ValidSysextExtension)
-		slog.Debug("Activating layer",
+	for _, target_file := range args {
+		slog.Debug("Activating layer "+target_file,
 			slog.Bool("fromfile", fFromFile),
-			slog.String("layer", target_layer),
-			slog.String("blob", current_blob_path),
+			slog.String("layer", target_file),
 		)
 
 		wg.Add(1)
-		go func() {
+		go func(errChan chan<- error, target string) {
 			defer wg.Done()
-			_ = os.Remove(target_path)
-			_ = os.Symlink(current_blob_path, target_path)
-		}()
-	}
-	wg.Wait()
+			var (
+				deployment_path string
+				target_path     string
+			)
 
-	slog.Info("Successfully activated layers " + strings.Join(internal.MapVal(args, path.Base), " "))
+			if !strings.HasSuffix(target, internal.ValidSysextExtension) && fFromFile {
+				errChan <- errors.New("failed to parse file name, invalid sysext extension. should be " + internal.ValidSysextExtension)
+				return
+			}
+
+			if fFromFile {
+				layer_name := strings.Split(path.Base(target), ".")[0]
+				target_path = path.Join(extensions_dir, layer_name)
+				deployment_path, err = filepath.Abs(layer_name)
+				if err != nil {
+					errChan <- err
+					return
+				}
+			} else {
+				deployment_path = path.Join(cache_dir, target, internal.CurrentBlobName)
+				if _, err := os.Stat(deployment_path); err != nil {
+					errChan <- errors.New("target layer " + target + " could not be found")
+					return
+				}
+				target_path = path.Join(extensions_dir, target+internal.ValidSysextExtension)
+			}
+			if fOverride {
+				_ = os.Remove(target_path)
+			} else {
+				errChan <- errors.New(target + " is already activated")
+			}
+			if err := os.Symlink(deployment_path, target_path); err != nil {
+				errChan <- err
+			}
+		}(errChan, target_file)
+	}
+
+	go func() {
+		wg.Wait()
+		close(errChan)
+	}()
+
+	for err := range errChan {
+		slog.Warn(fmt.Sprintf("Error encountered when activating layers: %s", err.Error()), slog.String("error", err.Error()))
+	}
+
+	if len(errChan) == 0 {
+		slog.Info("Successfully activated layers", slog.String("layers", strings.Join(args, " ")))
+	}
 	return nil
 }

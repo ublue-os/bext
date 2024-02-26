@@ -28,7 +28,7 @@ func deactivateCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	var (
-		errChan chan error
+		errChan = make(chan error, len(args))
 		wg      sync.WaitGroup
 	)
 
