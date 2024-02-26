@@ -7,6 +7,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/spf13/cobra"
 	"github.com/ublue-os/bext/internal"
@@ -26,6 +27,17 @@ func init() {
 	ActivateCmd.Flags().BoolVarP(&fFromFile, "file", "f", false, "Parse positional arguments as files instead of layers")
 }
 
+func mapVal[T, U any](data []T, f func(T) U) []U {
+
+	res := make([]U, 0, len(data))
+
+	for _, e := range data {
+		res = append(res, f(e))
+	}
+
+	return res
+}
+
 func activateCmd(cmd *cobra.Command, args []string) error {
 	extensions_dir, err := filepath.Abs(path.Clean(internal.Config.ExtensionsDir))
 	if err != nil {
@@ -33,6 +45,7 @@ func activateCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if fFromFile {
+		var wg sync.WaitGroup
 		for _, target_file := range args {
 			if !strings.HasSuffix(target_file, internal.ValidSysextExtension) {
 				return errors.New("failed to parse file name, invalid sysext extension. Should be " + internal.ValidSysextExtension)
@@ -50,14 +63,16 @@ func activateCmd(cmd *cobra.Command, args []string) error {
 				return err
 			}
 
-			_ = os.Remove(file_abs)
-
-			if err := os.Symlink(file_abs, path.Join(extensions_dir, path.Base(file_abs))); err != nil {
-				return err
-			}
-			slog.Info("Successfully activated layer " + path.Base(file_abs))
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_ = os.Remove(file_abs)
+				_ = os.Symlink(file_abs, path.Join(extensions_dir, path.Base(file_abs)))
+			}()
 		}
+		wg.Done()
 
+		slog.Info("Successfully activated layers " + strings.Join(mapVal(args, path.Base), " "))
 		return nil
 	}
 
@@ -66,14 +81,15 @@ func activateCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	if err := os.MkdirAll(internal.Config.ExtensionsDir, 0755); err != nil {
+		return err
+	}
+
+	var wg sync.WaitGroup
 	for _, target_layer := range args {
 		current_blob_path := path.Join(cache_dir, target_layer, internal.CurrentBlobName)
 		if _, err := os.Stat(current_blob_path); err != nil {
 			return errors.New("target layer " + target_layer + " could not be found")
-		}
-
-		if err := os.MkdirAll(internal.Config.ExtensionsDir, 0755); err != nil {
-			return err
 		}
 
 		target_path := path.Join(extensions_dir, path.Base(path.Dir(current_blob_path))+internal.ValidSysextExtension)
@@ -83,14 +99,15 @@ func activateCmd(cmd *cobra.Command, args []string) error {
 			slog.String("blob", current_blob_path),
 		)
 
-		_ = os.Remove(target_path)
-
-		if err := os.Symlink(current_blob_path, target_path); err != nil {
-			return err
-		}
-
-		slog.Info("Successfully activated layer " + path.Base(target_layer))
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = os.Remove(target_path)
+			_ = os.Symlink(current_blob_path, target_path)
+		}()
 	}
+	wg.Wait()
 
+	slog.Info("Successfully activated layers " + strings.Join(mapVal(args, path.Base), " "))
 	return nil
 }
