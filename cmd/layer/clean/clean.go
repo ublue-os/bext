@@ -11,7 +11,6 @@ import (
 	"github.com/jedib0t/go-pretty/v6/progress"
 	"github.com/spf13/cobra"
 	"github.com/ublue-os/bext/internal"
-	"github.com/ublue-os/bext/pkg/logging"
 	"github.com/ublue-os/bext/pkg/percentmanager"
 )
 
@@ -113,7 +112,6 @@ func cleanCmd(cmd *cobra.Command, args []string) error {
 
 	if !*internal.Config.NoProgress {
 		go pw.Render()
-		slog.SetDefault(logging.NewMuteLogger())
 	}
 
 	for _, entry := range target_cache {

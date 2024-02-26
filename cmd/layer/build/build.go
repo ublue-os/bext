@@ -20,7 +20,6 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/spf13/cobra"
 	"github.com/ublue-os/bext/internal"
-	"github.com/ublue-os/bext/pkg/logging"
 	"github.com/ublue-os/bext/pkg/percentmanager"
 )
 
@@ -79,7 +78,6 @@ func buildCmd(cmd *cobra.Command, args []string) error {
 
 	if !*internal.Config.NoProgress {
 		go pw.Render()
-		slog.SetDefault(logging.NewMuteLogger())
 	}
 	pw.AppendTracker(build_tracker.Tracker)
 

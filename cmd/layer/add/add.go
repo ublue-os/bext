@@ -16,7 +16,6 @@ import (
 	"github.com/ublue-os/bext/internal"
 	"github.com/ublue-os/bext/pkg/filecomp"
 	"github.com/ublue-os/bext/pkg/fileio"
-	"github.com/ublue-os/bext/pkg/logging"
 	"github.com/ublue-os/bext/pkg/percentmanager"
 )
 
@@ -56,7 +55,6 @@ func addCmd(cmd *cobra.Command, args []string) error {
 	pw := percent.NewProgressWriter()
 	if !*internal.Config.NoProgress {
 		go pw.Render()
-		slog.SetDefault(logging.NewMuteLogger())
 	}
 	var expectedSections int = 4
 
