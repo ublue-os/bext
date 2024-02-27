@@ -1,44 +1,61 @@
 package deactivate
 
 import (
-	"github.com/spf13/cobra"
-	"github.com/ublue-os/bext/internal"
+	"fmt"
 	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
+	"sync"
+
+	"github.com/spf13/cobra"
+	"github.com/ublue-os/bext/internal"
 )
 
 var DeactivateCmd = &cobra.Command{
-	Use:   "deactivate [TARGET]",
+	Use:   "deactivate [TARGET...]",
 	Short: "Deactivate a layer and refresh sysext",
 	Long:  `Deativate a selected layer (unsymlink it from /var/lib/extensions) and refresh the system extensions store.`,
 	RunE:  deactivateCmd,
+	Args:  cobra.MinimumNArgs(1),
 }
 
 func deactivateCmd(cmd *cobra.Command, args []string) error {
-	if len(args) < 1 {
-		return internal.NewPositionalError("TARGET")
-	}
-
-	target_layer := args[0]
-
 	extensions_dir, err := filepath.Abs(path.Clean(internal.Config.ExtensionsDir))
 	if err != nil {
 		return err
 	}
 
-	target_layer_path := path.Join(extensions_dir, target_layer+internal.ValidSysextExtension)
+	var (
+		errChan = make(chan error, len(args))
+		wg      sync.WaitGroup
+	)
 
-	if _, err := os.Stat(target_layer_path); err != nil {
-		return err
+	for _, target_layer := range args {
+		wg.Add(1)
+		go func(errChan chan<- error, target string) {
+			defer wg.Done()
+
+			if err := os.Remove(path.Join(extensions_dir, target+internal.ValidSysextExtension)); err != nil {
+				errChan <- err
+				return
+			}
+		}(errChan, target_layer)
 	}
 
-	if err := os.Remove(target_layer_path); err != nil {
-		return err
+	go func() {
+		wg.Wait()
+		close(errChan)
+	}()
+
+	for err := range errChan {
+		slog.Warn(fmt.Sprintf("Error encountered when deactivating layers: %s", err.Error()), slog.String("error", err.Error()))
 	}
 
-	slog.Info("Successfully deactivated " + target_layer)
+	if len(errChan) == 0 {
+		slog.Info("Successfully deactivated layers", slog.String("layers", strings.Join(args, " ")))
+	}
 
 	return nil
 }
