@@ -5,7 +5,7 @@ go 1.21.6
 require github.com/spf13/cobra v1.8.0 // direct
 
 require (
-	github.com/containers/podman/v4 v4.9.2
+	github.com/containers/podman/v4 v4.9.3
 	github.com/jedib0t/go-pretty/v6 v6.5.4
 	github.com/opencontainers/runtime-spec v1.2.0
 	golang.org/x/text v0.14.0
