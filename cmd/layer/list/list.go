@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/ublue-os/bext/internal"
 	"github.com/ublue-os/bext/pkg/fileio"
+	"github.com/ublue-os/bext/pkg/logging"
 )
 
 var ListCmd = &cobra.Command{
@@ -51,6 +52,10 @@ func listCmd(cmd *cobra.Command, args []string) error {
 	cache_dir, err := filepath.Abs(path.Clean(internal.Config.CacheDir))
 	if err != nil {
 		return err
+	}
+
+	if !*fLogOnly {
+		slog.SetDefault(logging.NewMuteLogger())
 	}
 
 	if *fCheck {
