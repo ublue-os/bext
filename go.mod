@@ -5,7 +5,7 @@ go 1.21.6
 require github.com/spf13/cobra v1.8.0 // direct
 
 require (
-	github.com/containers/podman/v4 v4.9.3
+	github.com/containers/podman/v4 v4.9.5
 	github.com/jedib0t/go-pretty/v6 v6.5.5
 	github.com/opencontainers/runtime-spec v1.2.0
 	golang.org/x/text v0.14.0
@@ -29,11 +29,11 @@ require (
 	github.com/containerd/errdefs v0.1.0 // indirect
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/containerd/stargz-snapshotter/estargz v0.15.1 // indirect
-	github.com/containers/buildah v1.33.7 // indirect
-	github.com/containers/common v0.57.4 // indirect
+	github.com/containers/buildah v1.33.8 // indirect
+	github.com/containers/common v0.57.5 // indirect
 	github.com/containers/image/v5 v5.30.1 // indirect
 	github.com/containers/libtrust v0.0.0-20230121012942-c1716e8a8d01 // indirect
-	github.com/containers/ocicrypt v1.1.9 // indirect
+	github.com/containers/ocicrypt v1.1.10 // indirect
 	github.com/containers/psgo v1.8.0 // indirect
 	github.com/containers/storage v1.53.0 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.1-0.20231103132048-7d375ecc2b09 // indirect
